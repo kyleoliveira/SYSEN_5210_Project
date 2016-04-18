@@ -26,49 +26,28 @@ class Aircraft
     state :done
 
     # Events that transition an aircraft between states
-    event :approach do
-      transitions from: [:contacted, :approaching], to: :approaching, unless: :is_at_queue?
-      after do
-        @approaching_time -= 1 unless @approaching_time < 1
+    event :start_approach do
+      transitions from: :contacted, to: :approaching, unless: :is_done_approaching?
+      after do |current_time|
+        @approaching_time += current_time
       end
     end
 
     event :start_queuing, after: :queue_up do
-      transitions from: [:approaching, :circling], to: :queuing, if: :is_at_queue?
-    end
-
-    event :queue do
-      transitions from: :queuing, to: :queuing, unless: :is_at_threshold_point?
-      after do
-        @queuing_time -= 1 unless @queuing_time < 1
-      end
+      transitions from: [:approaching, :circling], to: :queuing
     end
 
     event :start_circling do
       transitions from: :queuing, to: :circling, if: :is_at_threshold_point?
-      after do
-        @circling_time = positive_normal_random_number(750, 150)
-      end
-    end
-
-    event :circle do
-      transitions from: :circling, to: :circling, unless: :is_done_circling?
-      after do
-        @circling_time -= 1 unless @circling_time < 1
+      after do |current_time|
+        @circling_time = current_time + positive_normal_random_number(750, 150)
       end
     end
 
     event :start_landing do
       transitions from: :queuing, to: :landing, if: :is_at_threshold_point?
-      after do
-        @landing_time = positive_normal_random_number(750, 150)
-      end
-    end
-
-    event :land do
-      transitions from: :landing, to: :landing, unless: :is_done_landing?
-      after do
-        @landing_time -= 1 unless @landing_time < 1
+      after do |current_time|
+        @landing_time = current_time + positive_normal_random_number(750, 150)
       end
     end
 
@@ -122,11 +101,27 @@ class Aircraft
   end
 
   def airlines
-    ['SATA', 'TAP', 'United', 'American', 'Delta']
+    %w(SATA TAP United American Delta)
   end
 
   def random_flight_number
     "#{airlines.sample} #{(800..4000).to_a.sample}"
+  end
+
+  # Convenience method for getting the current counter until the next transition
+  def transition_counter
+    case
+      when approaching?
+        approaching_time
+      when queuing?
+        queuing_time
+      when circling?
+        circling_time
+      when landing?
+        landing_time
+      else
+        nil
+    end
   end
 
   #
@@ -139,40 +134,47 @@ class Aircraft
   # Otherwise, the aircraft may potentially spend more time in the landing queue.
   # This additional time is based on the type of the aircraft and the aircraft preceding it and is
   # calculated based on the mean and standard deviation times provided.
-  def queue_up(lead)
+  def queue_up(lead, current_time)
     if lead.nil?
-      @queuing_time = 40
+      @queuing_time = current_time + 40
     else
-      @queuing_time = separation_from(lead)
+      @queuing_time = current_time + separation_from(lead)
     end
   end
 
   # Given that the aircraft is approaching,
   # determines if it has reached the landing queue.
   # @return [TrueFalse] true if the aircraft is at the queue
-  def is_at_queue?
-    @approaching_time == 0
+  def is_done_approaching?(current_time)
+    @approaching_time == current_time
   end
 
   # Given that the aircraft is circling,
   # determines if it has reached the landing queue.
   # @return [TrueFalse] true if the aircraft is at the queue
-  def is_done_circling?
-    @circling_time == 0
+  def is_done_circling?(current_time)
+    @circling_time == current_time
   end
 
   # Given that the aircraft is queuing,
   # determines if it has reached the threshold point.
   # @return [TrueFalse] true if the aircraft is at the threshold point
-  def is_at_threshold_point?
-    @queuing_time == 0
+  def is_at_queue?(current_time)
+    is_done_approaching?(current_time) || is_done_circling?(current_time)
+  end
+
+  # Given that the aircraft is queuing,
+  # determines if it has reached the threshold point.
+  # @return [TrueFalse] true if the aircraft is at the threshold point
+  def is_at_threshold_point?(current_time)
+    @queuing_time == current_time
   end
 
   # Given that the aircraft is landing,
   # determines if it is done landing.
   # @return [TrueFalse] true if the aircraft is done landing
-  def is_done_landing?
-    @landing_time == 0
+  def is_done_landing?(current_time)
+    @landing_time == current_time
   end
 
   # Returns an appropriately generated separation time
