@@ -5,7 +5,7 @@ class Simulation
 
   attr_accessor :future_arrivals, # A list of generated arrivals
                 :approaching_queue, # The queue of aircraft that have made initial contact and approaching the landing queue
-  #               :landing_queue,   # The queue of aircraft that are ready to land. Some may be circling
+                :landing_queue,   # The queue of aircraft that are ready to land. Some may be circling
   #               :landing_zone,    # The aircraft on the runway that are approaching the simulation exit
                 :sim_time         # The current simulation time in seconds
 
@@ -13,11 +13,12 @@ class Simulation
   # @param [Integer] arrival_count The number of arrivals to generate for the simulation
   def initialize(arrival_count=10, filename='simulation.out')
     @output_file = open(filename, 'w')
+    @output_file.sync = true
 
     @sim_time = 0
     @approaching_queue = []
     # @circling_queue = []
-    # @landing_queue = []
+    @landing_queue = []
     # @landing_zone = []
     @future_arrivals = []
 
@@ -34,10 +35,27 @@ class Simulation
     while future_arrivals.length > 0 && future_arrivals.first.arrival_time == sim_time
       future_arrivals.first.approach!
       approaching_queue << future_arrivals.slice!(0)
-      @output_file.write "\n#{approaching_queue.last.flight_number} made contact at T=#{sim_time}\n"
+      @output_file.write "\n#{approaching_queue.last.flight_number} made contact at T=#{sim_time}, ETA=#{approaching_queue.last.approaching_time}\n"
+      @output_file.write "\nFEL: #{future_arrivals.length}, Na: #{approaching_queue.length}, Nl: #{landing_queue.length}\n"
     end
   end
-  #
+
+  # Updates the landing queue state
+  def process_approaching
+    # Update the approaching aircrafts' status
+    @approaching_queue.each { |aircraft| aircraft.approach! if aircraft.may_approach? }
+
+    # Transition any aircraft that are ready to do so
+    while approaching_queue.length > 0 && approaching_queue.first.may_start_queuing?
+      approaching_queue.first.start_queuing!(landing_queue.last)
+      landing_queue << approaching_queue.slice!(0)
+      @output_file.write "\n#{landing_queue.last.flight_number} entering the landing queue at T=#{sim_time} " <<
+                             "with separation=#{landing_queue.last.queuing_time}\n"
+      @output_file.write "\nFEL: #{future_arrivals.length}, Na: #{approaching_queue.length}, Nl: #{landing_queue.length}\n"
+    end
+  end
+
+
   # # Updates the landing queue state
   # def process_circling
   #   # Decrement the circling time for everyone who is already in the queue
@@ -51,7 +69,7 @@ class Simulation
   #   end
   #   @circling_queue.delete_if { |aircraft| aircraft.is_queuing? }
   # end
-  #
+
   # # Updates the landing queue state
   # def process_landing_queue
   #   # Increment queuing time for all the aircraft that are queuing
@@ -81,7 +99,9 @@ class Simulation
       process_arrivals
 
       # process_circling
-      #
+
+      process_approaching
+
       # process_landing_zone
       #
       # process_landing_queue
