@@ -2,7 +2,10 @@
 
 require './simulation.rb'
 
-10.times do |i|
-  sim = Simulation.new(10, "simulation_#{i.to_s.rjust(2, '0')}.csv")
+reps = (ARGV[0] || 10).to_i
+filename = ARGV[1] || 'simulation'
+
+reps.times do |i|
+  sim = Simulation.new(10, "./results/#{filename}_#{i.to_s.rjust(2, '0')}.csv")
   sim.run!
 end
