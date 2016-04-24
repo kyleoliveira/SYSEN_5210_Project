@@ -9,11 +9,18 @@ class Simulation
                 :circling_queue,  # The queue of aircraft that are currently circling
                 :landing_zone,    # The aircraft on the runway that are approaching the simulation exit
                 :done_queue,      # The aircraft that have successfully left the simulation
-                :sim_time         # The current simulation time in seconds
+                :sim_time,        # The current simulation time in seconds
+                :n_a,
+                :n_lq,
+                :n_c,
+                :n_lz,
+                :n_tp,
+                :n_lq_gt_4,
+                :n_d
 
   # Sets up the simulation
   # @param [Integer] arrival_count The number of arrivals to generate for the simulation
-  def initialize(arrival_count=10, filename='simulation.out')
+  def initialize(arrival_count=10, filename='simulation.csv', separation_mean=nil, separation_sd=nil)
     @arrival_count = arrival_count
     @output_file = open(filename, 'w')
     @output_file.sync = true
@@ -26,6 +33,19 @@ class Simulation
     @done_queue = []
     @future_arrivals = []
 
+    # Initialize the statistics of interest
+    @n_a = 0
+    @n_lq = 0
+    @n_c = 0
+    @n_lz = 0
+    @n_tp = 0
+    @n_lq_gt_4 = 0
+    @n_d = 0
+
+    # This lets us update the separation mean and sd table from the default ones:
+    Aircraft::separation_mean = separation_mean unless separation_mean.nil?
+    Aircraft::separation_sd = separation_sd unless separation_sd.nil?
+
     # Generate a given number of arrivals to process, and sort the list based on arrival time
     arrival_count.times do
       @future_arrivals << Aircraft.new
@@ -34,9 +54,17 @@ class Simulation
   end
 
   def print_header
-    header_string = '"T", "FEL", "Next Contact At", "Na", "Next Landing Queue ETA", ' <<
-        '"Nq", "Next Threshold Point ETA", "Nc", "Next Circle Complete At",' <<
-        "\"Nl\", \"Next Landing Zone ETA\", \"Nd\"\n"
+    header_string = '"T", ' <<
+                    '"FEL", "Next Contact At", ' <<
+                    '"Na", "Next Landing Queue ETA", ' <<
+                    '"Nq", "Next Threshold Point ETA", ' <<
+                    '"Nc", "Next Circle Complete At",' <<
+                    "\"Nl\", \"Next Landing Zone ETA\", " <<
+                    "\"Nd\", " <<
+                    "\"sum(Na)\", \"sum(Nlq)\", \"sum(Nc)\", " <<
+                    "\"sum(Nlz)\", \"sum(Ntp)\", \"sum(Nlq>=4)\", " <<
+                    "\"sum(Nd)\"" <<
+                    "\n"
     @output_file.write header_string
   end
 
@@ -51,9 +79,17 @@ class Simulation
     landing_zone_eta = landing_zone.length > 0 ? landing_zone.first.landing_time : '--'
 
 
-    @output_file.write "\"#{sim_time}\", \"#{future_arrivals.length}\", \"#{fel_eta}\", \"#{approaching_queue.length}\", \"#{approach_eta}\", " <<
-                       "\"#{landing_queue.length}\", \"#{landing_queue_eta}\", \"#{circling_queue.length}\", \"#{circling_eta}\", " <<
-                       "\"#{landing_zone.length}\", \"#{landing_zone_eta}\", \"#{done_queue.length}\"\n"
+    @output_file.write "\"#{sim_time}\", " <<
+                       "\"#{future_arrivals.length}\", \"#{fel_eta}\", " <<
+                       "\"#{approaching_queue.length}\", \"#{approach_eta}\", " <<
+                       "\"#{landing_queue.length}\", \"#{landing_queue_eta}\", " <<
+                       "\"#{circling_queue.length}\", \"#{circling_eta}\", " <<
+                       "\"#{landing_zone.length}\", \"#{landing_zone_eta}\", " <<
+                       "\"#{done_queue.length}\", " <<
+                       "\"#{n_a}\", \"#{n_lq}\", \"#{n_c}\", " <<
+                       "\"#{n_lz}\", \"#{n_tp}\", \"#{n_lq_gt_4}\", " <<
+                       "\"#{n_d}\"" <<
+                       "\n"
   end
 
   # Adds any new arrivals at the current time to the landing queue
@@ -62,6 +98,7 @@ class Simulation
     while future_arrivals.length > 0 && future_arrivals.first.arrival_time == sim_time
       future_arrivals.first.start_approach!(sim_time)
       approaching_queue << future_arrivals.slice!(0)
+      @n_a += 1
       # @output_file.write "\n#{approaching_queue.last.flight_number} (#{approaching_queue.last.type}) made contact at T=#{sim_time}, ETA=T+#{approaching_queue.last.approaching_time}\n"
       print_update
     end
@@ -73,6 +110,8 @@ class Simulation
     while approaching_queue.length > 0 && approaching_queue.first.is_at_queue?(sim_time)
       approaching_queue.first.start_queuing!(landing_queue.last, sim_time)
       landing_queue << approaching_queue.slice!(0)
+      @n_lq += 1
+      @n_lq_gt_4 += 1 if landing_queue.length > 3
       # @output_file.write "\n#{landing_queue.last.flight_number} (#{landing_queue.last.type}) entering the landing queue at T=#{sim_time} " <<
       #                        "with separation=#{landing_queue.last.queuing_time}\n"
       print_update
@@ -85,6 +124,8 @@ class Simulation
     while circling_queue.length > 0 && circling_queue.first.is_at_queue?(sim_time)
       circling_queue.first.start_queuing!(landing_queue.last, sim_time)
       landing_queue << circling_queue.slice!(0)
+      @n_lq += 1
+      @n_lq_gt_4 += 1 if landing_queue.length > 3
       # @output_file.write "\n#{landing_queue.last.flight_number} (#{landing_queue.last.type}) reentering the landing queue at T=#{sim_time} " <<
       #                        "with separation=#{landing_queue.last.queuing_time}\n"
       print_update
@@ -97,6 +138,9 @@ class Simulation
     while landing_queue.length > 0 && landing_zone.length == 0 && landing_queue.first.may_start_landing?(sim_time)
       landing_queue.first.start_landing!(sim_time)
       landing_zone << landing_queue.slice!(0)
+      @n_lz += 1
+      @n_tp += 1
+      @n_lq_gt_4 += 1 if landing_queue.length > 3
       # @output_file.write "\n#{landing_zone.last.flight_number} (#{landing_zone.last.type}) landing at T=#{sim_time}, " <<
       #                        "ETA=T+#{landing_zone.last.landing_time}\n"
       print_update
@@ -106,6 +150,9 @@ class Simulation
     while landing_queue.length > 0 && landing_zone.length == 1 && landing_queue.first.may_start_circling?(sim_time)
       landing_queue.first.start_circling!(sim_time)
       circling_queue << landing_queue.slice!(0)
+      @n_c += 1
+      @n_tp += 1
+      @n_lq_gt_4 += 1 if landing_queue.length > 3
       # @output_file.write "\n#{circling_queue.last.flight_number} (#{circling_queue.last.type}) circling back around at T=#{sim_time}, " <<
       #                        "returning to landing queue at T+#{circling_queue.last.circling_time}\n"
       print_update
@@ -119,6 +166,7 @@ class Simulation
     while landing_zone.length > 0 && landing_zone.first.may_finish?(sim_time)
       landing_zone.first.finish!(sim_time)
       done_queue << landing_zone.slice!(0)
+      @n_d += 1
       # @output_file.write "\n#{done_queue.last.flight_number} (#{done_queue.last.type}) finished at T=#{sim_time}\n"
       print_update
     end

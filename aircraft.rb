@@ -187,9 +187,11 @@ class Aircraft
 
   class << self
 
-    # The mean of separation given lead (column) and in-trail (row) type
+    attr_writer :separation_mean, # The mean of separation given lead (column) and in-trail (row) type
+                :separation_sd    # The standard deviation of separation given lead (column) and in-trail (row) type
+
     def separation_mean
-      {
+      @separation_mean || {
           heavy: {
               heavy: 64,
               large: 108,
@@ -208,9 +210,8 @@ class Aircraft
       }
     end
 
-    # The standard deviation of separation given lead (column) and in-trail (row) type
     def separation_sd
-      {
+      @separation_sd || {
           heavy: {
               heavy: 30,
               large: 40,
