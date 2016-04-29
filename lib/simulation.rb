@@ -1,4 +1,4 @@
-require './aircraft.rb'
+require "#{File.expand_path(File.dirname(__FILE__))}/aircraft.rb"
 
 # The main class for the application. Manages overall aspects of the simulation.
 class Simulation

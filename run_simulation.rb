@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require './simulation.rb'
+require "#{File.expand_path(File.dirname(__FILE__))}/lib/simulation.rb"
 
 reps = (ARGV[0] || 10).to_i
 aircraft = (ARGV[1] || 10).to_i
