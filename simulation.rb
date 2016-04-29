@@ -51,6 +51,7 @@ class Simulation
     @future_arrivals.sort!{ |left, right| left.arrival_time.to_i <=> right.arrival_time.to_i }
   end
 
+  # Prints the header to the output file.
   def print_header
     header_string = '"T", ' <<
                     '"FEL", "Next Contact At", ' <<
@@ -66,6 +67,7 @@ class Simulation
     @output_file.write header_string
   end
 
+  # Prints the current simulation state to the output file.
   def print_update
     fel_eta = future_arrivals.length > 0 ? future_arrivals.first.arrival_time : '--'
     approach_eta = approaching_queue.length > 0 ? approaching_queue.first.approaching_time : '--'
@@ -109,7 +111,7 @@ class Simulation
     end
   end
 
-  # Updates the landing queue state
+  # Updates the circling queue state
   def process_circling
     # Transition any aircraft that are ready to do so
     while circling_queue.length > 0 && circling_queue.first.is_at_queue?(sim_time)
@@ -152,10 +154,14 @@ class Simulation
     end
   end
 
+  # Are all aircraft processed through the simulation
+  # @return [TrueFalse] True if all aircraft have been processed
   def all_aircraft_processed?
     done_queue.length == @arrival_count
   end
 
+  # Calculates when the next even will occur across all queues
+  # @return [Integer] The time at which the next event will occur
   def time_jump
     next_up = []
     next_up << @approaching_queue.first unless @approaching_queue.length == 0

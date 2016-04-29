@@ -83,6 +83,10 @@ class Aircraft
     generate_approaching_time
   end
 
+  # Generates a normally distributed random variable that is positive and an integer (since all calculations are in seconds)
+  # @param [Float] mu The mean
+  # @param [Float] sigma The standard deviation
+  # @return [Integer] A normally distributed random variable that is positive and an integer
   def positive_normal_random_number(mu, sigma)
     result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
     until result >= 0
@@ -101,15 +105,19 @@ class Aircraft
     @approaching_time = positive_normal_random_number(600, 150)
   end
 
+  # @return A list of airlines that our aircraft may fly for
   def airlines
     %w(SATA TAP United American Delta)
   end
 
+  # Generates a pseudo random combination of an airline and a 3-4 digit number
+  # @return A flight number
   def random_flight_number
     "#{airlines.sample} #{(800..4000).to_a.sample}"
   end
 
   # Convenience method for getting the current counter until the next transition
+  # @return [Integer] The counter for the current transition
   def transition_counter
     case
       when approaching?
@@ -185,6 +193,8 @@ class Aircraft
                                   Aircraft::separation_sd[lead.type][self.type])
   end
 
+  # Converts the aircraft to a string for printing
+  # @return The string
   def to_s
     "#{@flight_number} (#{type})#{@queuing_time > 0 ? ", ETA #{@queuing_time}" : ''}"
   end
@@ -194,6 +204,8 @@ class Aircraft
     attr_writer :separation_mean, # The mean of separation given lead (column) and in-trail (row) type
                 :separation_sd    # The standard deviation of separation given lead (column) and in-trail (row) type
 
+    # The table of means to use for calculating separation distances
+    # @return The table of means
     def separation_mean
       @separation_mean || {
           heavy: {
@@ -214,6 +226,8 @@ class Aircraft
       }
     end
 
+    # The table of standard deviations to use for calculating separation distances
+    # @return The table of standard deviations
     def separation_sd
       @separation_sd || {
           heavy: {
