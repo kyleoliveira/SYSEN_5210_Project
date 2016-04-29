@@ -47,6 +47,7 @@ class Aircraft
     event :start_landing do
       transitions from: :queuing, to: :landing, if: :is_at_threshold_point?
       after do |current_time|
+        @queuing_time = 0
         @landing_time = current_time + positive_normal_random_number(750, 150)
       end
     end
@@ -74,7 +75,7 @@ class Aircraft
 
     @arrival_time = 0
     @approaching_time = 0
-    @queuing_time = 40
+    @queuing_time = 0
     @circling_time = 0
     @landing_time = 0
 
@@ -184,6 +185,9 @@ class Aircraft
                                   Aircraft::separation_sd[lead.type][self.type])
   end
 
+  def to_s
+    "#{@flight_number} (#{type})#{@queuing_time > 0 ? ", ETA #{@queuing_time}" : ''}"
+  end
 
   class << self
 
