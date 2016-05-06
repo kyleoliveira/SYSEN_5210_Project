@@ -19,7 +19,7 @@ class Simulation
 
   # Sets up the simulation
   # @param [Integer] arrival_count The number of arrivals to generate for the simulation
-  def initialize(arrival_count=10, filename='simulation.csv', separation_mean=nil, separation_sd=nil)
+  def initialize(arrival_count=30, filename='simulation.csv', separation_mean=nil, separation_sd=nil)
     @arrival_count = arrival_count
     @output_file = open(filename, 'w')
     @output_file.sync = true
@@ -51,18 +51,38 @@ class Simulation
     @future_arrivals.sort!{ |left, right| left.arrival_time.to_i <=> right.arrival_time.to_i }
   end
 
+  def print_fancy_queues_header
+    queues_string = "\"FEL\", " <<
+        "\"Approaching\", " <<
+        "\"Landing Queue\", " <<
+        "\"Circling\", " <<
+        "\"Landing Zone\", " <<
+        "\"Done\""
+  end
+
+  def print_fancy_queues
+    queues_string = "\"#{Simulation::queue_to_s(@future_arrivals)}\", " <<
+                    "\"#{Simulation::queue_to_s(@approaching_queue)}\", " <<
+                    "\"#{Simulation::queue_to_s(@landing_queue)}\", " <<
+                    "\"#{Simulation::queue_to_s(@circling_queue)}\", " <<
+                    "\"#{Simulation::queue_to_s(@landing_zone)}\", " <<
+                    "\"#{Simulation::queue_to_s(@done_queue)}\""
+  end
+
   # Prints the header to the output file.
   def print_header
     header_string = '"T", ' <<
-                    '"FEL", "Next Contact At", ' <<
-                    '"Na", "Next Landing Queue ETA", ' <<
-                    '"Nq", "Next Threshold Point ETA", ' <<
-                    '"Nc", "Next Circle Complete At",' <<
-                    "\"Nl\", \"Next Landing Zone ETA\", " <<
-                    "\"Nd\", " <<
+                    print_fancy_queues_header << ', ' <<
+                    '"FEL", ' <<
+                    '"Na", ' <<
+                    '"Nq", ' <<
+                    '"Nq>4", ' <<
+                    '"Nc", ' <<
+                    '"Nl", ' <<
+                    '"Nd", ' <<
                     "\"sum(Na)\", \"sum(Nlq)\", \"sum(Nc)\", " <<
                     "\"sum(Nlz)\", \"sum(Ntp)\", " <<
-                    "\"sum(Nd)\"" <<
+                    "\"sum(Nd)\", " <<
                     "\n"
     @output_file.write header_string
   end
@@ -77,12 +97,7 @@ class Simulation
 
 
     @output_file.write "\"#{sim_time}\", " <<
-                       "\"#{future_arrivals.map(&:to_s).reverse}\", \"#{fel_eta}\", " <<
-                       "\"#{approaching_queue.map(&:to_s).reverse}\", \"#{approach_eta}\", " <<
-                       "\"#{landing_queue.map(&:to_s).reverse}\", \"#{landing_queue_eta}\", " <<
-                       "\"#{circling_queue.map(&:to_s).reverse}\", \"#{circling_eta}\", " <<
-                       "\"#{landing_zone.map(&:to_s).reverse}\", \"#{landing_zone_eta}\", " <<
-                       "\"#{done_queue.map(&:to_s).reverse}\", " <<
+                       "#{print_fancy_queues}, " <<
                        "\"#{n_a}\", \"#{n_lq}\", \"#{n_c}\", " <<
                        "\"#{n_lz}\", \"#{n_tp}\", " <<
                        "\"#{n_d}\"" <<
@@ -95,6 +110,7 @@ class Simulation
     while future_arrivals.length > 0 && future_arrivals.first.arrival_time == sim_time
       future_arrivals.first.start_approach!(sim_time)
       approaching_queue << future_arrivals.slice!(0)
+      approaching_queue.sort!{ |left,right| left.transition_counter <=> right.transition_counter }
       @n_a += 1
       print_update
     end
@@ -103,7 +119,7 @@ class Simulation
   # Updates the landing queue state
   def process_approaching
     # Transition any aircraft that are ready to do so
-    while approaching_queue.length > 0 && approaching_queue.first.is_at_queue?(sim_time)
+    while approaching_queue.length > 0 && approaching_queue.first.is_done_approaching?(sim_time)
       approaching_queue.first.start_queuing!(landing_queue.last, sim_time)
       landing_queue << approaching_queue.slice!(0)
       @n_lq += 1
@@ -114,7 +130,7 @@ class Simulation
   # Updates the circling queue state
   def process_circling
     # Transition any aircraft that are ready to do so
-    while circling_queue.length > 0 && circling_queue.first.is_at_queue?(sim_time)
+    while circling_queue.length > 0 && circling_queue.first.is_done_circling?(sim_time)
       circling_queue.first.start_queuing!(landing_queue.last, sim_time)
       landing_queue << circling_queue.slice!(0)
       print_update
@@ -136,6 +152,7 @@ class Simulation
     while landing_queue.length > 0 && landing_zone.length == 1 && landing_queue.first.may_start_circling?(sim_time)
       landing_queue.first.start_circling!(sim_time)
       circling_queue << landing_queue.slice!(0)
+      circling_queue.sort!{ |left,right| left.transition_counter <=> right.transition_counter }
       @n_c += 1
       @n_tp += 1
       print_update
@@ -160,17 +177,21 @@ class Simulation
     done_queue.length == @arrival_count
   end
 
+  def next_up
+    [
+        (@future_arrivals.first.transition_counter unless @future_arrivals.empty?),
+        (@approaching_queue.first.transition_counter unless @approaching_queue.empty?),
+        (@circling_queue.first.transition_counter unless @circling_queue.empty?),
+        (@landing_queue.first.transition_counter unless @landing_queue.empty?),
+        (@landing_zone.first.transition_counter unless @landing_zone.empty?)
+    ]
+  end
+
   # Calculates when the next even will occur across all queues
   # @return [Integer] The time at which the next event will occur
   def time_jump
-    next_up = []
-    next_up << @approaching_queue.first unless @approaching_queue.length == 0
-    next_up << @circling_queue.first unless @circling_queue.length == 0
-    next_up << @landing_queue.first unless @landing_queue.length == 0
-    next_up << @landing_zone.first unless @landing_zone.length == 0
-    next_up << @future_arrivals.first unless @future_arrivals.length == 0
-
-    [sim_time + 1, next_up.collect{|a| a.transition_counter }.reject{|a| a.nil?}].flatten.min
+    nu = next_up.reject{ |n| n.nil? }
+    nu.empty? ? sim_time + 1 : nu.min
   end
 
   # Runs the simulation. By providing the optional duration variable, the user can step through a given amount of time.
@@ -192,6 +213,11 @@ class Simulation
       process_queuing
 
       # Advance the simulation time
+
+      puts next_up.inspect
+      if time_jump < @sim_time
+        raise Exception, self.inspect
+      end
       @sim_time = time_jump
     end
 
@@ -199,6 +225,15 @@ class Simulation
 
     # Close the file since we're done writing it.
     @output_file.close
+  end
+
+  class << self
+
+    # Converts a queue to a string of type initials, where the head of the queue is on the right
+    def queue_to_s(queue)
+      queue.collect{ |a| a.type[0].upcase }.reverse.join
+    end
+
   end
 
 end

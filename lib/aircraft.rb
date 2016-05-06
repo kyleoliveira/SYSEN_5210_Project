@@ -28,27 +28,26 @@ class Aircraft
     # Events that transition an aircraft between states
     event :start_approach do
       transitions from: :contacted, to: :approaching, unless: :is_done_approaching?
-      after do |current_time|
-        @approaching_time += current_time
+      before do |current_time|
+        @approaching_time = current_time + positive_normal_random_number(600, 150)
       end
     end
 
-    event :start_queuing, after: :queue_up do
+    event :start_queuing, before: :queue_up do
       transitions from: [:approaching, :circling], to: :queuing
     end
 
     event :start_circling do
       transitions from: :queuing, to: :circling, if: :is_at_threshold_point?
-      after do |current_time|
+      before do |current_time|
         @circling_time = current_time + positive_normal_random_number(750, 150)
       end
     end
 
     event :start_landing do
       transitions from: :queuing, to: :landing, if: :is_at_threshold_point?
-      after do |current_time|
-        @queuing_time = 0
-        @landing_time = current_time + positive_normal_random_number(750, 150)
+      before do |current_time|
+        @landing_time = current_time + positive_normal_random_number(120, 30)
       end
     end
 
@@ -73,14 +72,11 @@ class Aircraft
 
     @flight_number = random_flight_number
 
-    @arrival_time = 0
+    @arrival_time = positive_normal_random_number(180, 60)
     @approaching_time = 0
     @queuing_time = 0
     @circling_time = 0
     @landing_time = 0
-
-    generate_arrival_time
-    generate_approaching_time
   end
 
   # Generates a normally distributed random variable that is positive and an integer (since all calculations are in seconds)
@@ -89,20 +85,10 @@ class Aircraft
   # @return [Integer] A normally distributed random variable that is positive and an integer
   def positive_normal_random_number(mu, sigma)
     result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
-    until result >= 0
+    while result < 0
       result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
     end
     result
-  end
-
-  # Generates a random arrival time based on N(180, 60)
-  def generate_arrival_time
-    @arrival_time = positive_normal_random_number(180, 60)
-  end
-
-  # Generates a random approach time based on N(180, 60)
-  def generate_approaching_time
-    @approaching_time = positive_normal_random_number(600, 150)
   end
 
   # @return A list of airlines that our aircraft may fly for
@@ -121,13 +107,15 @@ class Aircraft
   def transition_counter
     case
       when approaching?
-        approaching_time
+        approaching_time.to_i
       when queuing?
-        queuing_time
+        queuing_time.to_i
       when circling?
-        circling_time
+        circling_time.to_i
       when landing?
-        landing_time
+        landing_time.to_i
+      when contacted?
+        arrival_time.to_i
       else
         nil
     end
@@ -163,13 +151,6 @@ class Aircraft
   # @return [TrueFalse] true if the aircraft is at the queue
   def is_done_circling?(current_time)
     @circling_time == current_time
-  end
-
-  # Given that the aircraft is queuing,
-  # determines if it has reached the threshold point.
-  # @return [TrueFalse] true if the aircraft is at the threshold point
-  def is_at_queue?(current_time)
-    is_done_approaching?(current_time) || is_done_circling?(current_time)
   end
 
   # Given that the aircraft is queuing,
