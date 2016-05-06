@@ -1,4 +1,5 @@
 require "#{File.expand_path(File.dirname(__FILE__))}/aircraft.rb"
+require "#{File.expand_path(File.dirname(__FILE__))}/aircraft_queue.rb"
 
 # The main class for the application. Manages overall aspects of the simulation.
 class Simulation
@@ -22,15 +23,15 @@ class Simulation
   def initialize(arrival_count=30, filename='simulation.csv', separation_mean=nil, separation_sd=nil)
     @arrival_count = arrival_count
     @output_file = open(filename, 'w')
-    @output_file.sync = true
+    # @output_file.sync = true
 
     @sim_time = 0
-    @approaching_queue = []
-    @circling_queue = []
-    @landing_queue = []
-    @landing_zone = []
-    @done_queue = []
-    @future_arrivals = []
+    @approaching_queue = AircraftQueue.new
+    @circling_queue = AircraftQueue.new
+    @landing_queue = AircraftQueue.new
+    @landing_zone = AircraftQueue.new
+    @done_queue = AircraftQueue.new
+    @future_arrivals = AircraftQueue.new
 
     # Initialize the statistics of interest
     @n_a = 0
@@ -48,38 +49,33 @@ class Simulation
     arrival_count.times do
       @future_arrivals << Aircraft.new
     end
-    @future_arrivals.sort!{ |left, right| left.arrival_time.to_i <=> right.arrival_time.to_i }
+
+    # Sort the FEL by arrival time so that the first future arrival is at the front of the queue
+    @future_arrivals.sort!
   end
 
   def print_fancy_queues_header
-    queues_string = "\"FEL\", " <<
-        "\"Approaching\", " <<
-        "\"Landing Queue\", " <<
-        "\"Circling\", " <<
-        "\"Landing Zone\", " <<
-        "\"Done\""
+    "\"FEL\", " <<
+    "\"Approaching\", " <<
+    "\"Landing Queue\", " <<
+    "\"Circling\", " <<
+    "\"Landing Zone\", " <<
+    "\"Done\""
   end
 
   def print_fancy_queues
-    queues_string = "\"#{Simulation::queue_to_s(@future_arrivals)}\", " <<
-                    "\"#{Simulation::queue_to_s(@approaching_queue)}\", " <<
-                    "\"#{Simulation::queue_to_s(@landing_queue)}\", " <<
-                    "\"#{Simulation::queue_to_s(@circling_queue)}\", " <<
-                    "\"#{Simulation::queue_to_s(@landing_zone)}\", " <<
-                    "\"#{Simulation::queue_to_s(@done_queue)}\""
+    "\"#{Simulation::queue_to_s(@future_arrivals)}\", " <<
+    "\"#{Simulation::queue_to_s(@approaching_queue)}\", " <<
+    "\"#{Simulation::queue_to_s(@landing_queue)}\", " <<
+    "\"#{Simulation::queue_to_s(@circling_queue)}\", " <<
+    "\"#{Simulation::queue_to_s(@landing_zone)}\", " <<
+    "\"#{Simulation::queue_to_s(@done_queue)}\""
   end
 
   # Prints the header to the output file.
   def print_header
     header_string = '"T", ' <<
                     print_fancy_queues_header << ', ' <<
-                    '"FEL", ' <<
-                    '"Na", ' <<
-                    '"Nq", ' <<
-                    '"Nq>4", ' <<
-                    '"Nc", ' <<
-                    '"Nl", ' <<
-                    '"Nd", ' <<
                     "\"sum(Na)\", \"sum(Nlq)\", \"sum(Nc)\", " <<
                     "\"sum(Nlz)\", \"sum(Ntp)\", " <<
                     "\"sum(Nd)\", " <<
@@ -89,28 +85,22 @@ class Simulation
 
   # Prints the current simulation state to the output file.
   def print_update
-    fel_eta = future_arrivals.length > 0 ? future_arrivals.first.arrival_time : '--'
-    approach_eta = approaching_queue.length > 0 ? approaching_queue.first.approaching_time : '--'
-    landing_queue_eta = landing_queue.length > 0 ? landing_queue.first.queuing_time : '--'
-    circling_eta = circling_queue.length > 0 ? circling_queue.first.circling_time : '--'
-    landing_zone_eta = landing_zone.length > 0 ? landing_zone.first.landing_time : '--'
-
-
-    @output_file.write "\"#{sim_time}\", " <<
-                       "#{print_fancy_queues}, " <<
-                       "\"#{n_a}\", \"#{n_lq}\", \"#{n_c}\", " <<
-                       "\"#{n_lz}\", \"#{n_tp}\", " <<
-                       "\"#{n_d}\"" <<
-                       "\n"
+    line = "\"#{sim_time}\", " <<
+           "#{print_fancy_queues}, " <<
+           "\"#{n_a}\", \"#{n_lq}\", \"#{n_c}\", " <<
+           "\"#{n_lz}\", \"#{n_tp}\", " <<
+           "\"#{n_d}\"" <<
+           "\n"
+    @output_file.write line
   end
 
   # Adds any new arrivals at the current time to the landing queue
   def process_arrivals
     # Move any new arrivals from the future arrivals list to end of the landing queue
-    while future_arrivals.length > 0 && future_arrivals.first.arrival_time == sim_time
-      future_arrivals.first.start_approach!(sim_time)
+    while future_arrivals.length > 0 && future_arrivals.first.next_transition_at == sim_time
+      future_arrivals.first.approach!(sim_time)
       approaching_queue << future_arrivals.slice!(0)
-      approaching_queue.sort!{ |left,right| left.transition_counter <=> right.transition_counter }
+      approaching_queue.sort!
       @n_a += 1
       print_update
     end
@@ -119,8 +109,8 @@ class Simulation
   # Updates the landing queue state
   def process_approaching
     # Transition any aircraft that are ready to do so
-    while approaching_queue.length > 0 && approaching_queue.first.is_done_approaching?(sim_time)
-      approaching_queue.first.start_queuing!(landing_queue.last, sim_time)
+    while approaching_queue.length > 0 && approaching_queue.first.done_approaching?(sim_time)
+      approaching_queue.first.queue!(landing_queue.last, sim_time)
       landing_queue << approaching_queue.slice!(0)
       @n_lq += 1
       print_update
@@ -130,8 +120,8 @@ class Simulation
   # Updates the circling queue state
   def process_circling
     # Transition any aircraft that are ready to do so
-    while circling_queue.length > 0 && circling_queue.first.is_done_circling?(sim_time)
-      circling_queue.first.start_queuing!(landing_queue.last, sim_time)
+    while circling_queue.length > 0 && circling_queue.first.done_circling?(sim_time)
+      circling_queue.first.requeue!(landing_queue.last, sim_time)
       landing_queue << circling_queue.slice!(0)
       print_update
     end
@@ -140,8 +130,8 @@ class Simulation
   # Updates the landing queue state
   def process_queuing
     # Transition any aircraft that are ready to do so
-    while landing_queue.length > 0 && landing_zone.length == 0 && landing_queue.first.may_start_landing?(sim_time)
-      landing_queue.first.start_landing!(sim_time)
+    while landing_queue.length > 0 && landing_zone.length == 0 && landing_queue.first.may_land?(sim_time)
+      landing_queue.first.land!(sim_time)
       landing_zone << landing_queue.slice!(0)
       @n_lz += 1
       @n_tp += 1
@@ -149,10 +139,10 @@ class Simulation
     end
 
     # Any other aircraft that are ready to land must circle if the landing zone is occupied
-    while landing_queue.length > 0 && landing_zone.length == 1 && landing_queue.first.may_start_circling?(sim_time)
-      landing_queue.first.start_circling!(sim_time)
+    while landing_queue.length > 0 && landing_zone.length == 1 && landing_queue.first.may_circle?(sim_time)
+      landing_queue.first.circle!(sim_time)
       circling_queue << landing_queue.slice!(0)
-      circling_queue.sort!{ |left,right| left.transition_counter <=> right.transition_counter }
+      circling_queue.sort!
       @n_c += 1
       @n_tp += 1
       print_update
@@ -177,13 +167,15 @@ class Simulation
     done_queue.length == @arrival_count
   end
 
+  # A list of the times at which the next aircraft in each queue will be ready to transition.
+  # @return [Array] List of times
   def next_up
     [
-        (@future_arrivals.first.transition_counter unless @future_arrivals.empty?),
-        (@approaching_queue.first.transition_counter unless @approaching_queue.empty?),
-        (@circling_queue.first.transition_counter unless @circling_queue.empty?),
-        (@landing_queue.first.transition_counter unless @landing_queue.empty?),
-        (@landing_zone.first.transition_counter unless @landing_zone.empty?)
+      (@future_arrivals.first.next_transition_at unless @future_arrivals.empty?),
+      (@approaching_queue.first.next_transition_at unless @approaching_queue.empty?),
+      (@circling_queue.first.next_transition_at unless @circling_queue.empty?),
+      (@landing_queue.first.next_transition_at unless @landing_queue.empty?),
+      (@landing_zone.first.next_transition_at unless @landing_zone.empty?)
     ]
   end
 
@@ -213,11 +205,7 @@ class Simulation
       process_queuing
 
       # Advance the simulation time
-
-      puts next_up.inspect
-      if time_jump < @sim_time
-        raise Exception, self.inspect
-      end
+      raise Exception, "We have chosen the wrong time to jump to somewhere along the way!\n#{self.inspect}" if time_jump < @sim_time
       @sim_time = time_jump
     end
 
