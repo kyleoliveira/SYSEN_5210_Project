@@ -59,19 +59,8 @@ class Aircraft
 
   # Initializes the Aircraft's state
   def initialize
-
-    # Type is randomly selected given the approximate distribution of types:
-    type_random_sample = rand
-    if type_random_sample > 0.67
-      @type = :heavy
-    elsif type_random_sample <= 0.67 && type_random_sample > 0.21
-      @type = :large
-    else
-      @type = :small
-    end
-
-    @flight_number = random_flight_number
-
+    @type = Aircraft::random_type
+    @flight_number = Aircraft::random_flight_number
     @next_transition_at = positive_normal_random_number(180, 60)
   end
 
@@ -80,8 +69,13 @@ class Aircraft
   # @param [Aircraft] other_aircraft The aircraft to compare against
   # @return [Integer] -1,0,1 depending on where the aircraft should be sorted
   def <=>(other_aircraft)
-    # self.next_transition_time <=> other_aircraft.next_transition_time
     self.next_transition_at <=> other_aircraft.next_transition_at
+  end
+
+  # Converts the aircraft to a string for printing
+  # @return [String] The info string
+  def to_s
+    "#{@flight_number} (#{type}), ETA #{@next_transition_at}"
   end
 
   # Generates a normally distributed random variable that is positive and an integer (since all calculations are in seconds)
@@ -94,24 +88,14 @@ class Aircraft
       result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
     end
 
+    # The while-loop should prevent this from ever happening, buuuuut...
     raise RangeError, "#{result} is a negative normal random number for some reason! Woe is me!" if result < 0
 
     result
   end
 
-  # @return A list of airlines that our aircraft may fly for
-  def airlines
-    %w(SATA TAP United American Delta)
-  end
-
-  # Generates a pseudo random combination of an airline and a 3-4 digit number
-  # @return A flight number
-  def random_flight_number
-    "#{airlines.sample} #{(800..4000).to_a.sample}"
-  end
-
   #
-  # Methods that will be triggered on state machine transitions
+  # Methods that will be triggered on state machine transitions:
   #
 
   # Starts the aircraft queuing.
@@ -120,6 +104,8 @@ class Aircraft
   # Otherwise, the aircraft may potentially spend more time in the landing queue.
   # This additional time is based on the type of the aircraft and the aircraft preceding it and is
   # calculated based on the mean and standard deviation times provided.
+  # @param [Aircraft] lead The aircraft in front of the aircraft that is queuing up
+  # @param [Integer] current_time The current simulation time
   def queue_up(lead, current_time)
     if lead.nil?
       @next_transition_at = current_time + 40
@@ -163,19 +149,18 @@ class Aircraft
                                   Aircraft::separation_sd[lead.type][self.type])
   end
 
-  # Converts the aircraft to a string for printing
-  # @return The string
-  def to_s
-    "#{@flight_number} (#{type})#{@queuing_time > 0 ? ", ETA #{@queuing_time}" : ''}"
-  end
-
+  # For non-Ruby people:
+  # Everything in the following block is a class variable or method (essentially a singleton). Whenever you see something
+  # like:
+  #   Aircraft::some_method
+  # it is calling some_method out of the block below.
   class << self
 
     attr_writer :separation_mean, # The mean of separation given lead (column) and in-trail (row) type
                 :separation_sd    # The standard deviation of separation given lead (column) and in-trail (row) type
 
     # The table of means to use for calculating separation distances
-    # @return The table of means
+    # @return [Hash] The table of means
     def separation_mean
       @separation_mean || {
           heavy: {
@@ -196,6 +181,8 @@ class Aircraft
       }
     end
 
+    # Scales the means table by a given factor.
+    # @param [Float] factor The factor to multiply each value in the table by
     def scale_separation_mean_by(factor)
       Aircraft::separation_mean = Aircraft::separation_mean.each do |_, means|
         means.each do |key, value|
@@ -205,7 +192,7 @@ class Aircraft
     end
 
     # The table of standard deviations to use for calculating separation distances
-    # @return The table of standard deviations
+    # @return [Hash] The table of standard deviations
     def separation_sd
       @separation_sd || {
           heavy: {
@@ -226,11 +213,39 @@ class Aircraft
       }
     end
 
+    # Scales the standard deviations table by a given factor.
+    # @param [Float] factor The factor to multiply each value in the table by
     def scale_separation_sd_by(factor)
       Aircraft::separation_sd = Aircraft::separation_sd.each do |_, sds|
         sds.each do |key, value|
           sds[key] = value * factor
         end
+      end
+    end
+
+    # A list of airlines that can be used for generating flight numbers
+    # @return [String] A list of airlines that our aircraft may fly for
+    def airlines
+      %w(SATA TAP United American Delta NZ BA JetBlue)
+    end
+
+    # Generates a pseudo-random combination of an airline and a 3-4 digit number
+    # @return [String] A flight number
+    def random_flight_number
+      "#{Aircraft::airlines.sample} #{(800..4000).to_a.sample}"
+    end
+
+    # Selects a random type based on the probability of a particular type arriving at the airport.
+    # @return [Symbol] The type
+    def random_type
+      # Type is randomly selected given the approximate distribution of types:
+      type_random_sample = rand
+      if type_random_sample > 0.67
+        :heavy
+      elsif type_random_sample <= 0.67 && type_random_sample > 0.21
+        :large
+      else
+        :small
       end
     end
 
