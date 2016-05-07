@@ -56,28 +56,15 @@ class Simulation
     @future_arrivals.sort!
   end
 
-  def print_fancy_queues_header
-    "\"FEL\", " <<
-    "\"Approaching\", " <<
-    "\"Landing Queue\", " <<
-    "\"Circling\", " <<
-    "\"Landing Zone\", " <<
-    "\"Done\""
-  end
-
-  def print_fancy_queues
-    "\"#{Simulation::queue_to_s(@future_arrivals)}\", " <<
-    "\"#{Simulation::queue_to_s(@approaching_queue)}\", " <<
-    "\"#{Simulation::queue_to_s(@landing_queue)}\", " <<
-    "\"#{Simulation::queue_to_s(@circling_queue)}\", " <<
-    "\"#{Simulation::queue_to_s(@landing_zone)}\", " <<
-    "\"#{Simulation::queue_to_s(@done_queue)}\""
-  end
-
   # Prints the header to the output file.
   def print_header
     header_string = '"T", ' <<
-                    print_fancy_queues_header << ', ' <<
+                    "\"FEL\", " <<
+                    "\"Approaching\", " <<
+                    "\"Landing Queue\", " <<
+                    "\"Circling\", " <<
+                    "\"Landing Zone\", " <<
+                    "\"Done\", " <<
                     "\"sum(Na)\", \"sum(Nlq)\", \"sum(Nc)\", " <<
                     "\"sum(Nlz)\", \"sum(Ntp)\", " <<
                     "\"sum(Nd)\", " <<
@@ -85,6 +72,24 @@ class Simulation
                     "\"sum(Nlq>4)\"" <<
                     "\n"
     @output_file.write header_string
+  end
+
+  # Prints the current simulation state to the output file.
+  def print_update
+    line = "\"#{sim_time}\", " <<
+           "\"#{@future_arrivals}\", " <<
+           "\"#{@approaching_queue}\", " <<
+           "\"#{@landing_queue}\", " <<
+           "\"#{@circling_queue}\", " <<
+           "\"#{@landing_zone}\", " <<
+           "\"#{@done_queue}\", " <<
+           "\"#{n_a}\", \"#{n_lq}\", \"#{n_c}\", " <<
+           "\"#{n_lz}\", \"#{n_tp}\", " <<
+           "\"#{n_d}\", " <<
+           "\"#{n_lq_gt_4?}\", " <<
+           "\"#{@n_lq_gt_4}\"" <<
+           "\n"
+    @output_file.write line
   end
 
   # Reports whether the number of aircraft in the landing queue is greater than 4
@@ -104,19 +109,6 @@ class Simulation
     else
       @n_lq_gt_4_since = nil
     end
-  end
-
-  # Prints the current simulation state to the output file.
-  def print_update
-    line = "\"#{sim_time}\", " <<
-           "#{print_fancy_queues}, " <<
-           "\"#{n_a}\", \"#{n_lq}\", \"#{n_c}\", " <<
-           "\"#{n_lz}\", \"#{n_tp}\", " <<
-           "\"#{n_d}\", " <<
-           "\"#{n_lq_gt_4?}\", " <<
-           "\"#{@n_lq_gt_4}\"" <<
-           "\n"
-    @output_file.write line
   end
 
   # Adds any new arrivals at the current time to the landing queue
@@ -249,15 +241,6 @@ class Simulation
 
     # Close the file since we're done writing it.
     @output_file.close
-  end
-
-  class << self
-
-    # Converts a queue to a string of type initials, where the head of the queue is on the right
-    def queue_to_s(queue)
-      queue.collect{ |a| a.type[0].upcase }.reverse.join
-    end
-
   end
 
 end

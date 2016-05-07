@@ -12,4 +12,10 @@ class AircraftQueue < Array
     super
   end
 
+  # Converts a queue to a string of type initials, where the head of the queue is on the right
+  # @return [String] Visual representation of the queue
+  def to_s()
+    self.collect{ |a| a.type[0].upcase }.reverse.join
+  end
+
 end
