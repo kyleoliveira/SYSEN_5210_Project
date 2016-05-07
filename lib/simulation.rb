@@ -178,7 +178,6 @@ class Simulation
       update_queue_length_statistic
       print_update
     end
-
   end
 
   # Updates the landing zone state
