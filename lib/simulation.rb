@@ -40,6 +40,8 @@ class Simulation
     @n_lz = 0
     @n_tp = 0
     @n_d = 0
+    @n_lq_gt_4 = 0
+    @n_lq_gt_4_since = nil
 
     # This lets us update the separation mean and sd table from the default ones:
     Aircraft::separation_mean = separation_mean unless separation_mean.nil?
@@ -79,8 +81,29 @@ class Simulation
                     "\"sum(Na)\", \"sum(Nlq)\", \"sum(Nc)\", " <<
                     "\"sum(Nlz)\", \"sum(Ntp)\", " <<
                     "\"sum(Nd)\", " <<
+                    "\"Nlq>4\", " <<
+                    "\"sum(Nlq>4)\"" <<
                     "\n"
     @output_file.write header_string
+  end
+
+  # Reports whether the number of aircraft in the landing queue is greater than 4
+  # @return [TrueFalse] True if there are 5 or more aircraft in the landing queue
+  def n_lq_gt_4?
+    landing_queue.length > 4
+  end
+
+  # Updates the statistic tracking whether the length of the landing queue is 5 or more
+  def update_queue_length_statistic
+    unless @n_lq_gt_4_since.nil?
+      @n_lq_gt_4 += sim_time - @n_lq_gt_4_since
+    end
+
+    if n_lq_gt_4?
+      @n_lq_gt_4_since = @sim_time
+    else
+      @n_lq_gt_4_since = nil
+    end
   end
 
   # Prints the current simulation state to the output file.
@@ -89,7 +112,9 @@ class Simulation
            "#{print_fancy_queues}, " <<
            "\"#{n_a}\", \"#{n_lq}\", \"#{n_c}\", " <<
            "\"#{n_lz}\", \"#{n_tp}\", " <<
-           "\"#{n_d}\"" <<
+           "\"#{n_d}\", " <<
+           "\"#{n_lq_gt_4?}\", " <<
+           "\"#{@n_lq_gt_4}\"" <<
            "\n"
     @output_file.write line
   end
@@ -102,6 +127,7 @@ class Simulation
       approaching_queue << future_arrivals.slice!(0)
       approaching_queue.sort!
       @n_a += 1
+      update_queue_length_statistic
       print_update
     end
   end
@@ -113,6 +139,7 @@ class Simulation
       approaching_queue.first.queue!(landing_queue.last, sim_time)
       landing_queue << approaching_queue.slice!(0)
       @n_lq += 1
+      update_queue_length_statistic
       print_update
     end
   end
@@ -124,6 +151,7 @@ class Simulation
       circling_queue.first.requeue!(landing_queue.last, sim_time)
       landing_queue << circling_queue.slice!(0)
       print_update
+      update_queue_length_statistic
     end
   end
 
@@ -135,6 +163,7 @@ class Simulation
       landing_zone << landing_queue.slice!(0)
       @n_lz += 1
       @n_tp += 1
+      update_queue_length_statistic
       print_update
     end
 
@@ -145,6 +174,7 @@ class Simulation
       circling_queue.sort!
       @n_c += 1
       @n_tp += 1
+      update_queue_length_statistic
       print_update
     end
 
@@ -157,6 +187,7 @@ class Simulation
       landing_zone.first.finish!(sim_time)
       done_queue << landing_zone.slice!(0)
       @n_d += 1
+      update_queue_length_statistic
       print_update
     end
   end
@@ -181,9 +212,15 @@ class Simulation
 
   # Calculates when the next even will occur across all queues
   # @return [Integer] The time at which the next event will occur
+  # @raise [RangeError] If a jump time is selected that is in the past
   def time_jump
     nu = next_up.reject{ |n| n.nil? }
-    nu.empty? ? sim_time + 1 : nu.min
+    jump_to_time = nu.empty? ? sim_time + 1 : nu.min
+
+    msg = "We have chosen the wrong time to jump to somewhere along the way!\n#{self.inspect}"
+    raise RangeError, msg if jump_to_time < @sim_time
+
+    jump_to_time
   end
 
   # Runs the simulation. By providing the optional duration variable, the user can step through a given amount of time.
@@ -205,7 +242,6 @@ class Simulation
       process_queuing
 
       # Advance the simulation time
-      raise Exception, "We have chosen the wrong time to jump to somewhere along the way!\n#{self.inspect}" if time_jump < @sim_time
       @sim_time = time_jump
     end
 
