@@ -196,6 +196,14 @@ class Aircraft
       }
     end
 
+    def scale_separation_mean_by(factor)
+      Aircraft::separation_mean = Aircraft::separation_mean.each do |_, means|
+        means.each do |key, value|
+          means[key] = value * factor
+        end
+      end
+    end
+
     # The table of standard deviations to use for calculating separation distances
     # @return The table of standard deviations
     def separation_sd
@@ -216,6 +224,14 @@ class Aircraft
               small: 30
           }
       }
+    end
+
+    def scale_separation_sd_by(factor)
+      Aircraft::separation_sd = Aircraft::separation_sd.each do |_, sds|
+        sds.each do |key, value|
+          sds[key] = value * factor
+        end
+      end
     end
 
   end

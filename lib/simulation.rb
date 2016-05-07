@@ -150,6 +150,7 @@ class Simulation
     while circling_queue.length > 0 && circling_queue.first.done_circling?(sim_time)
       circling_queue.first.requeue!(landing_queue.last, sim_time)
       landing_queue << circling_queue.slice!(0)
+      @n_lq += 1
       print_update
       update_queue_length_statistic
     end
