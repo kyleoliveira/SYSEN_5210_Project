@@ -25,7 +25,7 @@ class Aircraft
     event :approach do
       transitions from: :contacted, to: :approaching
       after do |current_time|
-        @next_transition_at = current_time + positive_normal_random_number(600, 150)
+        @next_transition_at = current_time + Aircraft::positive_normal_random_number(600, 150)
       end
     end
 
@@ -40,14 +40,14 @@ class Aircraft
     event :circle do
       transitions from: :queuing, to: :circling, if: :at_threshold_point?
       after do |current_time|
-        @next_transition_at = current_time + positive_normal_random_number(750, 150)
+        @next_transition_at = current_time + Aircraft::positive_normal_random_number(750, 150)
       end
     end
 
     event :land do
       transitions from: :queuing, to: :landing, if: :at_threshold_point?
       after do |current_time|
-        @next_transition_at = current_time + positive_normal_random_number(120, 30)
+        @next_transition_at = current_time + Aircraft::positive_normal_random_number(120, 30)
       end
     end
 
@@ -61,7 +61,7 @@ class Aircraft
   def initialize
     @type = Aircraft::random_type
     @flight_number = Aircraft::random_flight_number
-    @next_transition_at = positive_normal_random_number(180, 60)
+    @next_transition_at = Aircraft::positive_normal_random_number(180, 60)
   end
 
   # Compares an aircraft against another aircraft for sorting purposes.
@@ -76,22 +76,6 @@ class Aircraft
   # @return [String] The info string
   def to_s
     "#{@flight_number} (#{type}), ETA #{@next_transition_at}"
-  end
-
-  # Generates a normally distributed random variable that is positive and an integer (since all calculations are in seconds)
-  # @param [Float] mu The mean
-  # @param [Float] sigma The standard deviation
-  # @return [Integer] A normally distributed random variable that is positive and an integer
-  def positive_normal_random_number(mu, sigma)
-    result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
-    while result < 0
-      result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
-    end
-
-    # The while-loop should prevent this from ever happening, buuuuut...
-    raise RangeError, "#{result} is a negative normal random number for some reason! Woe is me!" if result < 0
-
-    result
   end
 
   #
@@ -145,8 +129,8 @@ class Aircraft
   # Returns an appropriately generated separation time
   # given the aircraft in front of this aircraft.
   def separation_from(lead)
-    positive_normal_random_number(Aircraft::separation_mean[lead.type][self.type],
-                                  Aircraft::separation_sd[lead.type][self.type])
+    Aircraft::positive_normal_random_number(Aircraft::separation_mean[lead.type][self.type],
+                                            Aircraft::separation_sd[lead.type][self.type])
   end
 
   # For non-Ruby people:
@@ -221,6 +205,22 @@ class Aircraft
           sds[key] = value * factor
         end
       end
+    end
+
+    # Generates a normally distributed random variable that is positive and an integer (since all calculations are in seconds)
+    # @param [Float] mu The mean
+    # @param [Float] sigma The standard deviation
+    # @return [Integer] A normally distributed random variable that is positive and an integer
+    def positive_normal_random_number(mu, sigma)
+      result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
+      while result < 0
+        result = Distribution::Normal.rng(mu, sigma).call.ceil.to_i
+      end
+
+      # The while-loop should prevent this from ever happening, buuuuut...
+      raise RangeError, "#{result} is a negative normal random number for some reason! Woe is me!" if result < 0
+
+      result
     end
 
     # A list of airlines that can be used for generating flight numbers
