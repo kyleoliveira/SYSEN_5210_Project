@@ -2,7 +2,7 @@ require "#{File.expand_path(File.dirname(__FILE__))}/aircraft.rb"
 require "#{File.expand_path(File.dirname(__FILE__))}/aircraft_queue.rb"
 
 # The main class for the application. Manages overall aspects of the simulation.
-class Simulation
+class AirportSimulation
 
   attr_accessor :future_arrivals,   # A list of generated arrivals
                 :approaching_queue, # The queue of aircraft that have made initial contact and approaching the landing queue

@@ -24,9 +24,9 @@ Or you can use irb:
 
 ```bash
 irb
-2.2.1 :001 > require './lib/simulation.rb'
+2.2.1 :001 > require './lib/airport_simulation.rb'
  => true 
-2.2.1 :002 > s = Simulation.new
+2.2.1 :002 > s = AirportSimulation.new
 ...
 2.2.1 :003 > s.run!
 Simulation complete at 11596

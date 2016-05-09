@@ -143,10 +143,16 @@ class Aircraft
     attr_writer :separation_mean, # The mean of separation given lead (column) and in-trail (row) type
                 :separation_sd    # The standard deviation of separation given lead (column) and in-trail (row) type
 
-    # The table of means to use for calculating separation distances
+    # The current table of means to use for calculating separation distances
     # @return [Hash] The table of means
     def separation_mean
-      @separation_mean || {
+      @separation_mean || default_separation_mean
+    end
+
+    # The default table of means to use for calculating separation distances
+    # @return [Hash] The table of means
+    def default_separation_mean
+      {
           heavy: {
               heavy: 64,
               large: 108,
@@ -175,10 +181,21 @@ class Aircraft
       end
     end
 
-    # The table of standard deviations to use for calculating separation distances
+    # Resets the separation means table to its default value
+    def reset_separation_mean
+      Aircraft::separation_mean = Aircraft::default_separation_mean
+    end
+
+    # The current table of standard deviations to use for calculating separation distances
     # @return [Hash] The table of standard deviations
     def separation_sd
-      @separation_sd || {
+      @separation_sd || default_separation_sd
+    end
+
+    # The default table of standard deviations to use for calculating separation distances
+    # @return [Hash] The table of standard deviations
+    def default_separation_sd
+      {
           heavy: {
               heavy: 30,
               large: 40,
@@ -205,6 +222,11 @@ class Aircraft
           sds[key] = value * factor
         end
       end
+    end
+
+    # Resets the separation standard deviations table to its default value
+    def reset_separation_sd
+      Aircraft::separation_mean = Aircraft::default_separation_mean
     end
 
     # Generates a normally distributed random variable that is positive and an integer (since all calculations are in seconds)
