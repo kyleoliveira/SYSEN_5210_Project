@@ -237,7 +237,7 @@ class AirportSimulation
       @sim_time = time_jump
     end
 
-    puts "Simulation complete at #{sim_time}\n"
+    #puts "Simulation complete at #{sim_time}\n"
 
     # Close the file since we're done writing it.
     @output_file.close
